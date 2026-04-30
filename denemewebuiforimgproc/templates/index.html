@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mediapipe Landmark Detector</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f18;
+      --surface:   #13161f;
+      --card:      #1a1e2e;
+      --border:    #252a3d;
+      --text:      #dce4f0;
+      --muted:     #6b7a99;
+      --face:      #00d4ff;
+      --hands:     #ffb400;
+      --pose:      #00e87a;
+      --danger:    #ff4d6d;
+      --radius:    10px;
+      --shadow:    0 4px 24px rgba(0,0,0,.5);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      gap: 16px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+    .logo svg { flex-shrink: 0; }
+
+    .mode-switcher {
+      display: flex;
+      gap: 8px;
+    }
+
+    .mode-btn {
+      padding: 9px 22px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .18s ease;
+      letter-spacing: .03em;
+    }
+    .mode-btn:hover { border-color: var(--text); color: var(--text); }
+
+    .mode-btn[data-mode="1"].active { background: rgba(0,212,255,.12); border-color: var(--face);  color: var(--face); }
+    .mode-btn[data-mode="2"].active { background: rgba(255,180,0,.12); border-color: var(--hands); color: var(--hands); }
+    .mode-btn[data-mode="3"].active { background: rgba(0,232,122,.12); border-color: var(--pose);  color: var(--pose); }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--pose);
+      box-shadow: 0 0 8px var(--pose);
+      animation: pulse 1.6s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: .35; }
+    }
+
+    /* ── Main layout ───────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      overflow: hidden;
+    }
+
+    /* ── Video pane ────────────────────────────── */
+    .video-pane {
+      position: relative;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #stream {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .mode-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      padding: 5px 13px;
+      border-radius: 20px;
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(6px);
+      border: 1px solid currentColor;
+      pointer-events: none;
+    }
+    .mode-badge.face  { color: var(--face); }
+    .mode-badge.hands { color: var(--hands); }
+    .mode-badge.pose  { color: var(--pose); }
+
+    /* ── Side panel ────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #refresh-badge {
+      font-size: .65rem;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: var(--border);
+      color: var(--muted);
+    }
+
+    #landmark-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    #landmark-content::-webkit-scrollbar { width: 5px; }
+    #landmark-content::-webkit-scrollbar-track { background: transparent; }
+    #landmark-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ── Landmark cards ────────────────────────── */
+    .group-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+
+    .group-title {
+      padding: 8px 12px;
+      font-size: .75rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .group-title.face-title  { color: var(--face); }
+    .group-title.hands-title { color: var(--hands); }
+    .group-title.pose-title  { color: var(--pose); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .72rem;
+      font-variant-numeric: tabular-nums;
+    }
+    th {
+      padding: 5px 8px;
+      text-align: right;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: .05em;
+      font-size: .65rem;
+      text-transform: uppercase;
+    }
+    th:first-child { text-align: left; }
+    tr:hover { background: rgba(255,255,255,.03); }
+    td {
+      padding: 4px 8px;
+      text-align: right;
+      color: var(--text);
+      border-top: 1px solid rgba(255,255,255,.04);
+    }
+    td:first-child { text-align: left; color: var(--muted); }
+
+    /* ── Pose angle cards ──────────────────────── */
+    .angles-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .angle-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .angle-name {
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .angle-value {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--pose);
+      font-variant-numeric: tabular-nums;
+    }
+    .angle-bar-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .angle-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--pose);
+      transition: width .15s ease;
+    }
+
+    /* ── Empty / loading state ─────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 40px 16px;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.7;
+    }
+    .empty-state svg { margin-bottom: 12px; opacity: .35; }
+
+    /* ── Visibility badge ──────────────────────── */
+    .vis-badge {
+      display: inline-block;
+      width: 28px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      vertical-align: middle;
+      overflow: hidden;
+    }
+    .vis-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--pose);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="10" stroke="#00d4ff" stroke-width="1.5"/>
+      <circle cx="11" cy="8"  r="2.5" fill="#00d4ff"/>
+      <line x1="11" y1="11" x2="7"  y2="16" stroke="#00e87a" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="11" y1="11" x2="15" y2="16" stroke="#00e87a" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="11" y1="11" x2="11" y2="17" stroke="#ffb400" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    Mediapipe Detector
+    <div class="status-dot"></div>
+  </div>
+
+  <div class="mode-switcher">
+    <button class="mode-btn active" data-mode="1">&#128100; Face</button>
+    <button class="mode-btn"        data-mode="2">&#9995; Hands</button>
+    <button class="mode-btn"        data-mode="3">&#127939; Pose</button>
+  </div>
+</header>
+
+<main>
+  <!-- Video -->
+  <div class="video-pane">
+    <img id="stream" src="/video_feed" alt="stream" />
+    <div id="mode-badge" class="mode-badge face">Face</div>
+  </div>
+
+  <!-- Panel -->
+  <div class="panel">
+    <div class="panel-header">
+      Landmarks
+      <span id="refresh-badge">live</span>
+    </div>
+    <div id="landmark-content">
+      <div class="empty-state">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <circle cx="18" cy="18" r="16" stroke="#6b7a99" stroke-width="1.5"/>
+          <circle cx="18" cy="14" r="4"  fill="#6b7a99"/>
+          <path d="M10 28c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke="#6b7a99" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <p>Waiting for detection&hellip;</p>
+        <p>Make sure your webcam is accessible.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  let currentMode = 1;
+  const LABELS = { 1: "Face", 2: "Hands", 3: "Pose" };
+  const CLASSES = { 1: "face", 2: "hands", 3: "pose" };
+
+  // ── Mode switching ───────────────────────────────────────────────────────
+  document.querySelectorAll(".mode-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const mode = parseInt(btn.dataset.mode);
+      await fetch(`/set_mode/${mode}`, { method: "POST" });
+      setActiveMode(mode);
+    });
+  });
+
+  function setActiveMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll(".mode-btn").forEach(b => {
+      b.classList.toggle("active", parseInt(b.dataset.mode) === mode);
+    });
+    const badge = document.getElementById("mode-badge");
+    badge.textContent  = LABELS[mode];
+    badge.className    = `mode-badge ${CLASSES[mode]}`;
+    // Clear panel immediately so it doesn't show stale data
+    document.getElementById("landmark-content").innerHTML = `
+      <div class="empty-state">Switching to ${LABELS[mode]} detection…</div>`;
+  }
+
+  // ── Landmark polling ─────────────────────────────────────────────────────
+  async function fetchLandmarks() {
+    try {
+      const res  = await fetch("/landmarks");
+      const json = await res.json();
+      render(json);
+    } catch (e) { /* silently ignore network hiccup */ }
+  }
+
+  setInterval(fetchLandmarks, 120);
+
+  // ── Rendering dispatcher ─────────────────────────────────────────────────
+  function render(payload) {
+    const el = document.getElementById("landmark-content");
+    if (!payload || !payload.type || !payload.data || Object.keys(payload.data).length === 0) {
+      el.innerHTML = `<div class="empty-state">No detection yet — position yourself in front of the camera.</div>`;
+      return;
+    }
+    if (payload.type === "face")  el.innerHTML = renderFace(payload.data);
+    if (payload.type === "hands") el.innerHTML = renderHands(payload.data);
+    if (payload.type === "pose")  el.innerHTML = renderPose(payload.data);
+  }
+
+  // ── Face renderer ────────────────────────────────────────────────────────
+  function renderFace(data) {
+    return Object.entries(data).map(([faceName, points]) => `
+      <div class="group-card">
+        <div class="group-title face-title">${faceName}</div>
+        <table>
+          <thead><tr>
+            <th>Landmark</th><th>X</th><th>Y</th><th>Z</th>
+          </tr></thead>
+          <tbody>
+            ${Object.entries(points).map(([name, v]) => `
+              <tr>
+                <td>${name}</td>
+                <td>${v.x.toFixed(3)}</td>
+                <td>${v.y.toFixed(3)}</td>
+                <td>${v.z.toFixed(3)}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`).join("");
+  }
+
+  // ── Hands renderer ───────────────────────────────────────────────────────
+  const FINGER_GROUPS = {
+    "Wrist":  ["Wrist"],
+    "Thumb":  ["Thumb CMC","Thumb MCP","Thumb IP","Thumb Tip"],
+    "Index":  ["Index MCP","Index PIP","Index DIP","Index Tip"],
+    "Middle": ["Middle MCP","Middle PIP","Middle DIP","Middle Tip"],
+    "Ring":   ["Ring MCP","Ring PIP","Ring DIP","Ring Tip"],
+    "Pinky":  ["Pinky MCP","Pinky PIP","Pinky DIP","Pinky Tip"],
+  };
+
+  function renderHands(data) {
+    return Object.entries(data).map(([handName, points]) => {
+      const fingers = Object.entries(FINGER_GROUPS).map(([finger, lms]) => {
+        const rows = lms.filter(l => points[l]).map(l => {
+          const v = points[l];
+          return `<tr>
+            <td>${l.includes("Wrist") ? "Wrist" : l.split(" ")[1]}</td>
+            <td>${v.x.toFixed(3)}</td>
+            <td>${v.y.toFixed(3)}</td>
+            <td>${v.z.toFixed(3)}</td>
+          </tr>`;
+        }).join("");
+        if (!rows) return "";
+        return `
+          <div style="margin-bottom:1px">
+            <div style="padding:4px 10px;font-size:.65rem;font-weight:700;letter-spacing:.06em;
+                        text-transform:uppercase;color:var(--hands);opacity:.8">${finger}</div>
+            <table>
+              <thead><tr><th>Joint</th><th>X</th><th>Y</th><th>Z</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      }).join("");
+
+      return `
+        <div class="group-card">
+          <div class="group-title hands-title">${handName}</div>
+          ${fingers}
+        </div>`;
+    }).join("");
+  }
+
+  // ── Pose renderer ────────────────────────────────────────────────────────
+  function renderPose(data) {
+    const angles    = data.angles    || {};
+    const landmarks = data.landmarks || {};
+
+    // Angle cards
+    const angleCards = Object.entries(angles).map(([name, val]) => {
+      const deg  = parseFloat(val);
+      const pct  = Math.min(100, (deg / 180) * 100).toFixed(1);
+      const color = deg < 60 ? "var(--danger)" : deg < 120 ? "var(--hands)" : "var(--pose)";
+      return `
+        <div class="angle-card">
+          <div class="angle-name">${name}</div>
+          <div class="angle-value" style="color:${color}">${val}</div>
+          <div class="angle-bar-track">
+            <div class="angle-bar-fill" style="width:${pct}%;background:${color}"></div>
+          </div>
+        </div>`;
+    }).join("");
+
+    // Landmark table (all 33 landmarks)
+    const rows = Object.entries(landmarks).map(([name, v]) => {
+      const visPct = Math.round(v.vis * 100);
+      return `
+        <tr>
+          <td style="font-size:.65rem">${name}</td>
+          <td>${v.x.toFixed(3)}</td>
+          <td>${v.y.toFixed(3)}</td>
+          <td>${v.z.toFixed(3)}</td>
+          <td>
+            <span class="vis-badge"><span class="vis-fill" style="width:${visPct}%"></span></span>
+          </td>
+        </tr>`;
+    }).join("");
+
+    return `
+      <!-- Angle cards -->
+      <div class="group-card" style="margin-bottom:10px">
+        <div class="group-title pose-title">Joint Angles</div>
+        <div class="angles-grid">${angleCards}</div>
+      </div>
+
+      <!-- All landmarks -->
+      <div class="group-card">
+        <div class="group-title pose-title">All 33 Landmarks</div>
+        <table>
+          <thead><tr>
+            <th>Name</th><th>X</th><th>Y</th><th>Z</th><th>Vis</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+</script>
+</body>
+</html>

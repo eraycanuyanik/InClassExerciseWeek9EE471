@@ -1,0 +1,13 @@
+# https://github.com/replicate/cog
+# task2 klasöründe:  cog predict -i image=@pose-1.jpg
+build:
+  gpu: false
+  python_version: "3.11"
+  python_packages:
+    - "numpy>=1.26,<3"
+    - "opencv-python-headless>=4.8,<5"
+    - "mediapipe>=0.10.14,<0.11"
+  run:
+    - curl -fsSL "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task" -o "pose_landmarker_lite.task"
+
+predict: "predict.py:Predict"

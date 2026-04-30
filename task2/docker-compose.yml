@@ -1,0 +1,14 @@
+# Kullanım (task2 içinde):
+#   docker compose build
+#   docker compose run --rm classify /data/pose-1.jpg
+#
+# Görünür klasör proje dizinine /data olarak bağlanır (salt okunur).
+
+services:
+  classify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pose-arm-classifier
+    volumes:
+      - .:/data:ro
