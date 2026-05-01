@@ -1,0 +1,13 @@
+# https://github.com/replicate/cog
+# task3 klasöründe:  cog predict -i image=@face-1.png
+build:
+  gpu: false
+  python_version: "3.11"
+  python_packages:
+    - "numpy>=1.26,<3"
+    - "opencv-python-headless>=4.8,<5"
+    - "mediapipe>=0.10.14,<0.11"
+  run:
+    - curl -fsSL "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" -o "face_landmarker.task"
+
+predict: "predict.py:Predict"
